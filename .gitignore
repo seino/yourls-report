@@ -1,0 +1,18 @@
+# 設定ファイル（認証情報を含む）
+config.php
+
+# 環境変数ファイル
+.env
+.env.local
+.env.*.local
+
+# ログファイル
+*.log
+
+# IDE設定
+.vscode/
+.idea/
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
