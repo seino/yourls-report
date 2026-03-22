@@ -13,18 +13,8 @@ requireAuth();
 // セキュリティヘッダー
 setSecurityHeaders(false);
 
-// エラー表示設定
-if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-    ini_set('log_errors', 1);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
-
-// タイムゾーン設定
-date_default_timezone_set('Asia/Tokyo');
+// 共通初期化
+initApplication();
 
 // データベース接続
 $pdo = getDatabaseConnection();
@@ -52,35 +42,45 @@ $page = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT, [
 // 検索キーワードのサニタイズ
 $search_keyword = sanitizeInput($_GET['search_keyword'] ?? '', 100);
 
+// 除外IP
+$excluded_ip = getExcludedIp();
+
 /**
  * 基本統計を取得
  */
-function getBasicStats($pdo, $start, $end)
+function getBasicStats($pdo, $start, $end, $excluded_ip)
 {
     $sql = "SELECT
                 COUNT(*) as total_clicks,
                 COUNT(DISTINCT shorturl) as unique_urls,
                 COUNT(DISTINCT ip_address) as unique_ips
             FROM " . YOURLS_DB_PREFIX . "log
-            WHERE click_time BETWEEN :start AND :end
-              AND ip_address != :excluded_ip";
+            WHERE click_time BETWEEN :start AND :end";
+
+    $params = ['start' => $start, 'end' => $end];
+    if ($excluded_ip !== '') {
+        $sql .= " AND ip_address != :excluded_ip";
+        $params['excluded_ip'] = $excluded_ip;
+    }
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute(['start' => $start, 'end' => $end, 'excluded_ip' => EXCLUDED_IP]);
+    $stmt->execute($params);
     return $stmt->fetch();
 }
 
 /**
  * URL別のクリック数トップを取得
  */
-function getTopUrlsCount($pdo, $start, $end, $search_keyword = '')
+function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
 {
     $sql = "SELECT COUNT(DISTINCT l.shorturl) as total
             FROM " . YOURLS_DB_PREFIX . "log l
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-            WHERE l.click_time BETWEEN :start AND :end
-              AND l.ip_address != :excluded_ip";
+            WHERE l.click_time BETWEEN :start AND :end";
 
+    if ($excluded_ip !== '') {
+        $sql .= " AND l.ip_address != :excluded_ip";
+    }
     if (!empty($search_keyword)) {
         $sql .= " AND (u.title LIKE :search_keyword OR u.url LIKE :search_keyword)";
     }
@@ -88,7 +88,9 @@ function getTopUrlsCount($pdo, $start, $end, $search_keyword = '')
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':start', $start);
     $stmt->bindValue(':end', $end);
-    $stmt->bindValue(':excluded_ip', EXCLUDED_IP);
+    if ($excluded_ip !== '') {
+        $stmt->bindValue(':excluded_ip', $excluded_ip);
+    }
     if (!empty($search_keyword)) {
         $stmt->bindValue(':search_keyword', '%' . $search_keyword . '%');
     }
@@ -96,7 +98,7 @@ function getTopUrlsCount($pdo, $start, $end, $search_keyword = '')
     return $stmt->fetch()['total'];
 }
 
-function getTopUrls($pdo, $start, $end, $per_page, $page, $search_keyword = '')
+function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_keyword = '')
 {
     $offset = ($page - 1) * $per_page;
 
@@ -110,9 +112,11 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $search_keyword = '')
                 MAX(l.click_time) as last_click
             FROM " . YOURLS_DB_PREFIX . "log l
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-            WHERE l.click_time BETWEEN :start AND :end
-              AND l.ip_address != :excluded_ip";
+            WHERE l.click_time BETWEEN :start AND :end";
 
+    if ($excluded_ip !== '') {
+        $sql .= " AND l.ip_address != :excluded_ip";
+    }
     if (!empty($search_keyword)) {
         $sql .= " AND (u.title LIKE :search_keyword OR u.url LIKE :search_keyword)";
     }
@@ -124,7 +128,9 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $search_keyword = '')
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':start', $start);
     $stmt->bindValue(':end', $end);
-    $stmt->bindValue(':excluded_ip', EXCLUDED_IP);
+    if ($excluded_ip !== '') {
+        $stmt->bindValue(':excluded_ip', $excluded_ip);
+    }
     $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     if (!empty($search_keyword)) {
@@ -137,34 +143,40 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $search_keyword = '')
 /**
  * 国別の集計
  */
-function getCountryStats($pdo, $start, $end, $limit = 10)
+function getCountryStats($pdo, $start, $end, $excluded_ip, $limit = 10)
 {
     $sql = "SELECT
                 country_code,
                 COUNT(*) as clicks
             FROM " . YOURLS_DB_PREFIX . "log
-            WHERE click_time BETWEEN :start AND :end
-              AND ip_address != :excluded_ip
-            GROUP BY country_code
+            WHERE click_time BETWEEN :start AND :end";
+
+    if ($excluded_ip !== '') {
+        $sql .= " AND ip_address != :excluded_ip";
+    }
+
+    $sql .= " GROUP BY country_code
             ORDER BY clicks DESC
             LIMIT :limit";
 
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':start', $start);
     $stmt->bindValue(':end', $end);
-    $stmt->bindValue(':excluded_ip', EXCLUDED_IP);
+    if ($excluded_ip !== '') {
+        $stmt->bindValue(':excluded_ip', $excluded_ip);
+    }
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll();
 }
 
 // データ取得
-$basic_stats = getBasicStats($pdo, $start_datetime, $end_datetime);
-$total_urls = getTopUrlsCount($pdo, $start_datetime, $end_datetime, $search_keyword);
+$basic_stats = getBasicStats($pdo, $start_datetime, $end_datetime, $excluded_ip);
+$total_urls = getTopUrlsCount($pdo, $start_datetime, $end_datetime, $excluded_ip, $search_keyword);
 $total_pages = ceil($total_urls / $per_page);
 if ($page > $total_pages && $total_pages > 0) $page = $total_pages;
-$top_urls = getTopUrls($pdo, $start_datetime, $end_datetime, $per_page, $page, $search_keyword);
-$country_stats = getCountryStats($pdo, $start_datetime, $end_datetime);
+$top_urls = getTopUrls($pdo, $start_datetime, $end_datetime, $per_page, $page, $excluded_ip, $search_keyword);
+$country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded_ip);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -729,23 +741,25 @@ $country_stats = getCountryStats($pdo, $start_datetime, $end_datetime);
                 </div>
 
                 <!-- 国別統計 -->
-                <div class="section">
-                    <h2>国別アクセス</h2>
-                    <div class="chart-container">
-                        <?php
-                        $max_country = max(array_column($country_stats, 'clicks'));
-                        foreach ($country_stats as $row):
-                            $percentage = ($row['clicks'] / $max_country) * 100;
-                        ?>
-                            <div class="bar">
-                                <div class="bar-label"><?= htmlspecialchars($row['country_code']) ?></div>
-                                <div class="bar-fill" style="width: <?= $percentage ?>%; min-width: 80px;">
-                                    <?= number_format($row['clicks']) ?>
+                <?php if (!empty($country_stats)): ?>
+                    <div class="section">
+                        <h2>国別アクセス</h2>
+                        <div class="chart-container">
+                            <?php
+                            $max_country = max(array_column($country_stats, 'clicks'));
+                            foreach ($country_stats as $row):
+                                $percentage = ($row['clicks'] / $max_country) * 100;
+                            ?>
+                                <div class="bar">
+                                    <div class="bar-label"><?= htmlspecialchars($row['country_code']) ?></div>
+                                    <div class="bar-fill" style="width: <?= $percentage ?>%; min-width: 80px;">
+                                        <?= number_format($row['clicks']) ?>
+                                    </div>
                                 </div>
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
-                </div>
+                <?php endif; ?>
 
             </div>
         </div>

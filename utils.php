@@ -141,6 +141,50 @@ function getExcludedIp()
 }
 
 /**
+ * アプリケーションの共通初期化処理
+ * エラー表示設定とタイムゾーンを一括設定する
+ */
+function initApplication()
+{
+    if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
+        error_reporting(0);
+        ini_set('display_errors', '0');
+        ini_set('log_errors', '1');
+    } else {
+        error_reporting(E_ALL);
+        ini_set('display_errors', '1');
+    }
+
+    date_default_timezone_set('Asia/Tokyo');
+}
+
+/**
+ * リファラー分類のCASE WHEN SQL断片を返す
+ *
+ * @param string $alias カラムエイリアス名
+ * @param bool $useJapanese 日本語ラベルを使用するか
+ * @return string SQL CASE WHEN句
+ */
+function getReferrerCaseSql($alias = 'referrer_type', $useJapanese = false)
+{
+    $labels = $useJapanese
+        ? ['direct' => 'ダイレクト', 'google' => 'Google', 'facebook' => 'Facebook', 'twitter' => 'Twitter', 'line' => 'LINE', 'instagram' => 'Instagram', 'other' => 'その他']
+        : ['direct' => 'direct', 'google' => 'google', 'facebook' => 'facebook', 'twitter' => 'twitter', 'line' => 'line', 'instagram' => 'instagram', 'other' => 'other'];
+
+    $case = "CASE
+                WHEN referrer = 'direct' THEN '{$labels['direct']}'
+                WHEN referrer LIKE '%google%' THEN '{$labels['google']}'
+                WHEN referrer LIKE '%facebook%' THEN '{$labels['facebook']}'
+                WHEN referrer LIKE '%twitter%' OR referrer LIKE '%t.co%' THEN '{$labels['twitter']}'
+                WHEN referrer LIKE '%line%' THEN '{$labels['line']}'
+                WHEN referrer LIKE '%instagram%' THEN '{$labels['instagram']}'
+                ELSE '{$labels['other']}'
+            END";
+
+    return $alias !== '' ? $case . " as {$alias}" : $case;
+}
+
+/**
  * HTTPSで接続されているかどうかを判定
  * リバースプロキシ（Nginx、AWS ALB等）にも対応
  *

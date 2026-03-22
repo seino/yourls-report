@@ -26,22 +26,13 @@ require_once $config_file;
 // 共通ユーティリティ読み込み
 require_once __DIR__ . '/utils.php';
 
-// エラー表示設定
-if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
+// 共通初期化
+initApplication();
 
 // CORS設定（本番環境では適切なオリジンに制限してください）
 $allowed_origin = defined('API_ALLOWED_ORIGIN') ? API_ALLOWED_ORIGIN : '*';
 header('Access-Control-Allow-Origin: ' . $allowed_origin);
 header('Content-Type: application/json; charset=UTF-8');
-
-// タイムゾーン設定
-date_default_timezone_set('Asia/Tokyo');
 
 // デフォルト設定値
 if (!defined('API_RATE_LIMIT')) {
@@ -103,7 +94,7 @@ function checkRateLimit()
         $data['blocked_until'] = $now + API_RATE_WINDOW;
         file_put_contents($rate_file, json_encode($data));
         header('Retry-After: ' . API_RATE_WINDOW);
-        sendError("レート制限を超過しました。{API_RATE_WINDOW}秒後に再試行してください。", 429);
+        sendError("レート制限を超過しました。" . API_RATE_WINDOW . "秒後に再試行してください。", 429);
     }
 
     // 現在のリクエストを記録
@@ -123,7 +114,7 @@ checkRateLimit();
 // API認証（API_KEYが設定されている場合のみ有効）
 if (defined('API_KEY') && API_KEY !== '') {
     $provided_key = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? '';
-    if ($provided_key !== API_KEY) {
+    if (!hash_equals(API_KEY, $provided_key)) {
         sendError('認証エラー: 無効なAPIキーです', 401);
     }
 }
@@ -263,15 +254,7 @@ switch ($action) {
         }
 
         $sql = "SELECT
-                    CASE
-                        WHEN referrer = 'direct' THEN 'direct'
-                        WHEN referrer LIKE '%google%' THEN 'google'
-                        WHEN referrer LIKE '%facebook%' THEN 'facebook'
-                        WHEN referrer LIKE '%twitter%' OR referrer LIKE '%t.co%' THEN 'twitter'
-                        WHEN referrer LIKE '%line%' THEN 'line'
-                        WHEN referrer LIKE '%instagram%' THEN 'instagram'
-                        ELSE 'other'
-                    END as referrer_type,
+                    " . getReferrerCaseSql('referrer_type', false) . ",
                     COUNT(*) as clicks
                 FROM " . YOURLS_DB_PREFIX . "log
                 WHERE {$base_where}

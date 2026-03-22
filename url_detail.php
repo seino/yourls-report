@@ -13,18 +13,8 @@ requireAuth();
 // セキュリティヘッダー（外部スクリプトChart.js使用のため true）
 setSecurityHeaders(true);
 
-// エラー表示設定
-if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-    ini_set('log_errors', 1);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
-
-// タイムゾーン設定
-date_default_timezone_set('Asia/Tokyo');
+// 共通初期化
+initApplication();
 
 // データベース接続
 $pdo = getDatabaseConnection();
@@ -46,6 +36,9 @@ if (empty($keyword)) {
     exit;
 }
 
+// 除外IP
+$excluded_ip = getExcludedIp();
+
 /**
  * URL情報を取得
  */
@@ -62,91 +55,99 @@ function getUrlInfo($pdo, $keyword)
 /**
  * 日別クリック数を取得
  */
-function getDailyClicksByUrl($pdo, $keyword, $start, $end)
+function getDailyClicksByUrl($pdo, $keyword, $start, $end, $excluded_ip)
 {
     $sql = "SELECT
                 DATE(click_time) as date,
                 COUNT(*) as clicks
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE shorturl = :keyword
-              AND click_time BETWEEN :start AND :end
-              AND ip_address != :excluded_ip
-            GROUP BY DATE(click_time)
-            ORDER BY date DESC";
+              AND click_time BETWEEN :start AND :end";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
+    $params = [
         'keyword' => $keyword,
         'start' => $start,
         'end' => $end,
-        'excluded_ip' => EXCLUDED_IP
-    ]);
+    ];
+    if ($excluded_ip !== '') {
+        $sql .= " AND ip_address != :excluded_ip";
+        $params['excluded_ip'] = $excluded_ip;
+    }
+
+    $sql .= " GROUP BY DATE(click_time)
+            ORDER BY date DESC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
 /**
  * 期間内の総クリック数を取得
  */
-function getTotalClicksByUrl($pdo, $keyword, $start, $end)
+function getTotalClicksByUrl($pdo, $keyword, $start, $end, $excluded_ip)
 {
     $sql = "SELECT COUNT(*) as total
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE shorturl = :keyword
-              AND click_time BETWEEN :start AND :end
-              AND ip_address != :excluded_ip";
+              AND click_time BETWEEN :start AND :end";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
+    $params = [
         'keyword' => $keyword,
         'start' => $start,
         'end' => $end,
-        'excluded_ip' => EXCLUDED_IP
-    ]);
+    ];
+    if ($excluded_ip !== '') {
+        $sql .= " AND ip_address != :excluded_ip";
+        $params['excluded_ip'] = $excluded_ip;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     return $stmt->fetch()['total'];
 }
 
 /**
  * リファラー別集計を取得
  */
-function getReferrersByUrl($pdo, $keyword, $start, $end)
+function getReferrersByUrl($pdo, $keyword, $start, $end, $excluded_ip)
 {
     $sql = "SELECT
-                CASE
-                    WHEN referrer = 'direct' THEN 'ダイレクト'
-                    WHEN referrer LIKE '%google%' THEN 'Google'
-                    WHEN referrer LIKE '%facebook%' THEN 'Facebook'
-                    WHEN referrer LIKE '%twitter%' OR referrer LIKE '%t.co%' THEN 'Twitter'
-                    WHEN referrer LIKE '%line%' THEN 'LINE'
-                    WHEN referrer LIKE '%instagram%' THEN 'Instagram'
-                    ELSE 'その他'
-                END as referrer_type,
+                " . getReferrerCaseSql('referrer_type', true) . ",
                 COUNT(*) as clicks
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE shorturl = :keyword
-              AND click_time BETWEEN :start AND :end
-              AND ip_address != :excluded_ip
-            GROUP BY referrer_type
-            ORDER BY clicks DESC";
+              AND click_time BETWEEN :start AND :end";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
+    $params = [
         'keyword' => $keyword,
         'start' => $start,
         'end' => $end,
-        'excluded_ip' => EXCLUDED_IP
-    ]);
+    ];
+    if ($excluded_ip !== '') {
+        $sql .= " AND ip_address != :excluded_ip";
+        $params['excluded_ip'] = $excluded_ip;
+    }
+
+    $sql .= " GROUP BY referrer_type
+            ORDER BY clicks DESC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
 // データ取得
 $url_info = getUrlInfo($pdo, $keyword);
 if (!$url_info) {
-    die('指定されたURLが見つかりません。');
+    http_response_code(404);
+    header('Location: yourls_report.php');
+    exit;
 }
 
-$daily_clicks = getDailyClicksByUrl($pdo, $keyword, $start_datetime, $end_datetime);
-$total_clicks = getTotalClicksByUrl($pdo, $keyword, $start_datetime, $end_datetime);
-$referrers = getReferrersByUrl($pdo, $keyword, $start_datetime, $end_datetime);
+$daily_clicks = getDailyClicksByUrl($pdo, $keyword, $start_datetime, $end_datetime, $excluded_ip);
+$total_clicks = getTotalClicksByUrl($pdo, $keyword, $start_datetime, $end_datetime, $excluded_ip);
+$referrers = getReferrersByUrl($pdo, $keyword, $start_datetime, $end_datetime, $excluded_ip);
 
 // 戻りリンク用パラメータ
 $back_params = http_build_query([

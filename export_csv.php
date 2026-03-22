@@ -10,23 +10,15 @@ requireAuth();
 
 // 設定ファイルとユーティリティはauth.phpで読み込み済み
 
-// エラー表示設定
-if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
-
-// タイムゾーン設定
-date_default_timezone_set('Asia/Tokyo');
+// 共通初期化
+initApplication();
 
 // データベース接続
 $pdo = getDatabaseConnection();
 
 // パラメータ取得
-$export_type = $_GET['type'] ?? 'summary'; // summary, detail, daily
+$allowed_types = ['summary', 'detail', 'daily'];
+$export_type = in_array($_GET['type'] ?? '', $allowed_types, true) ? $_GET['type'] : 'summary';
 $dateRange = normalizeDateRange(
     $_GET['start_date'] ?? null,
     $_GET['end_date'] ?? null
@@ -173,15 +165,7 @@ if ($export_type === 'detail') {
                 MAX(l.click_time) as last_click,
                 GROUP_CONCAT(
                     DISTINCT
-                    CASE
-                        WHEN l.referrer = 'direct' THEN 'ダイレクト'
-                        WHEN l.referrer LIKE '%google%' THEN 'Google'
-                        WHEN l.referrer LIKE '%facebook%' THEN 'Facebook'
-                        WHEN l.referrer LIKE '%twitter%' OR l.referrer LIKE '%t.co%' THEN 'Twitter'
-                        WHEN l.referrer LIKE '%line%' THEN 'LINE'
-                        WHEN l.referrer LIKE '%instagram%' THEN 'Instagram'
-                        ELSE 'その他'
-                    END
+                    " . getReferrerCaseSql('', true) . "
                     SEPARATOR ', '
                 ) as referrers
             FROM " . YOURLS_DB_PREFIX . "log l

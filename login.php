@@ -7,15 +7,14 @@
 require_once __DIR__ . '/auth.php';
 
 // セキュリティヘッダー
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('X-XSS-Protection: 1; mode=block');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com");
+setSecurityHeaders(false);
 
 // 既にログイン済みならリダイレクト
 if (isLoggedIn()) {
     $return_url = $_GET['return'] ?? 'yourls_report.php';
+    if (!isSafeRedirectUrl($return_url)) {
+        $return_url = 'yourls_report.php';
+    }
     header('Location: ' . $return_url);
     exit;
 }

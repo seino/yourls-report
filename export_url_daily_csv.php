@@ -10,17 +10,8 @@ requireAuth();
 
 // 設定ファイルとユーティリティはauth.phpで読み込み済み
 
-// エラー表示設定
-if (defined('IS_PRODUCTION') && IS_PRODUCTION) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
-
-// タイムゾーン設定
-date_default_timezone_set('Asia/Tokyo');
+// 共通初期化
+initApplication();
 
 // データベース接続
 $pdo = getDatabaseConnection();
@@ -29,7 +20,9 @@ $pdo = getDatabaseConnection();
 $keyword = sanitizeInput($_GET['keyword'] ?? '', 50);
 
 if (empty($keyword)) {
-    die('キーワードが指定されていません。');
+    http_response_code(400);
+    header('Location: yourls_report.php');
+    exit;
 }
 
 $dateRange = normalizeDateRange(
@@ -41,28 +34,37 @@ $end_date = $dateRange['end_date'];
 $start_datetime = $dateRange['start_datetime'];
 $end_datetime = $dateRange['end_datetime'];
 
+// 除外IP
+$excluded_ip = getExcludedIp();
+
 // 日別データ取得
 $sql = "SELECT
             DATE(click_time) as date,
             COUNT(*) as clicks
         FROM " . YOURLS_DB_PREFIX . "log
         WHERE shorturl = :keyword
-          AND click_time BETWEEN :start AND :end
-          AND ip_address != :excluded_ip
-        GROUP BY DATE(click_time)
-        ORDER BY date ASC";
+          AND click_time BETWEEN :start AND :end";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute([
+$params = [
     'keyword' => $keyword,
     'start' => $start_datetime,
     'end' => $end_datetime,
-    'excluded_ip' => EXCLUDED_IP
-]);
+];
+if ($excluded_ip !== '') {
+    $sql .= " AND ip_address != :excluded_ip";
+    $params['excluded_ip'] = $excluded_ip;
+}
+
+$sql .= " GROUP BY DATE(click_time)
+        ORDER BY date ASC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $daily_stats = $stmt->fetchAll();
 
 // CSVヘッダー
-$filename = 'daily_' . $keyword . '_' . $start_date . '_' . $end_date . '.csv';
+$safe_keyword = preg_replace('/[^a-zA-Z0-9_-]/', '_', $keyword);
+$filename = 'daily_' . $safe_keyword . '_' . $start_date . '_' . $end_date . '.csv';
 header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: no-cache, no-store, must-revalidate');
