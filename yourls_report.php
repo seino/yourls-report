@@ -681,7 +681,7 @@ $country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded
                                     <td><span class="rank"><?= ($page - 1) * $per_page + $index + 1 ?></span></td>
                                     <td>
                                         <strong><?= htmlspecialchars($row['keyword'] ?: $row['shorturl']) ?></strong><br>
-                                        <a href="<?= htmlspecialchars($row['url']) ?>" target="_blank" class="url-link" style="font-size: 12px;">
+                                        <a href="<?= htmlspecialchars(safeUrl($row['url'])) ?>" target="_blank" rel="noopener noreferrer" class="url-link" style="font-size: 12px;">
                                             <?= htmlspecialchars(substr($row['url'], 0, 60)) ?><?= strlen($row['url']) > 60 ? '...' : '' ?>
                                         </a>
                                     </td>

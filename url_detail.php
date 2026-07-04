@@ -140,8 +140,7 @@ function getReferrersByUrl($pdo, $keyword, $start, $end, $excluded_ip)
 // データ取得
 $url_info = getUrlInfo($pdo, $keyword);
 if (!$url_info) {
-    http_response_code(404);
-    header('Location: yourls_report.php');
+    header('Location: yourls_report.php', true, 302);
     exit;
 }
 
@@ -407,7 +406,7 @@ $back_params = http_build_query([
             <header>
                 <h1><?= htmlspecialchars($url_info['title'] ?: $keyword) ?></h1>
                 <div class="url-display">
-                    <a href="<?= htmlspecialchars($url_info['url']) ?>" target="_blank">
+                    <a href="<?= htmlspecialchars(safeUrl($url_info['url'])) ?>" target="_blank" rel="noopener noreferrer">
                         <?= htmlspecialchars($url_info['url']) ?>
                     </a>
                 </div>

@@ -216,6 +216,52 @@ function isHttps()
 }
 
 /**
+ * href属性に安全に出力できるURLへ整形する
+ * javascript: / data: 等の危険なスキームによる格納型XSSを防止する
+ *
+ * @param string $url DB等に由来するURL
+ * @return string http/https の絶対URLまたは相対URLならそのまま、危険なら '#'
+ */
+function safeUrl($url)
+{
+    $url = trim((string) $url);
+    if ($url === '') {
+        return '#';
+    }
+
+    // スキーム付きURLは http / https のみ許可
+    if (preg_match('/^([a-zA-Z][a-zA-Z0-9+.-]*):/', $url, $matches)) {
+        $scheme = strtolower($matches[1]);
+        return in_array($scheme, ['http', 'https'], true) ? $url : '#';
+    }
+
+    // スキームなし（相対URL・プロトコル相対URL）はそのまま許可
+    return $url;
+}
+
+/**
+ * CSVフィールドのフォーミュラインジェクションを無害化する
+ * Excel/Sheetsで数式として実行される先頭文字をエスケープする
+ *
+ * @param string|null $value CSVに出力する値
+ * @return string 無害化された文字列
+ */
+function sanitizeCsvField($value)
+{
+    $value = (string) $value;
+    if ($value === '') {
+        return $value;
+    }
+
+    // 数式として解釈され得る先頭文字はシングルクォートで無害化
+    if (in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        return "'" . $value;
+    }
+
+    return $value;
+}
+
+/**
  * 安全なリダイレクトURLかどうかを検証
  * オープンリダイレクト攻撃を防止
  *
