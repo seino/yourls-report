@@ -1,0 +1,43 @@
+parameters:
+    level: 5
+    paths:
+        - api.php
+        - auth.php
+        - export_csv.php
+        - export_url_daily_csv.php
+        - login.php
+        - logout.php
+        - url_detail.php
+        - utils.php
+        - yourls_report.php
+        - tests
+    bootstrapFiles:
+        - phpstan/bootstrap.php
+    # 環境（config.php）ごとに値が変わる定数。スタブの固定値で条件分岐を
+    # 「常にtrue/false」と誤判定させないために動的扱いとする。
+    dynamicConstantNames:
+        - IS_PRODUCTION
+        - REQUIRE_LOGIN
+        - API_KEY
+        - API_ALLOWED_ORIGIN
+        - EXCLUDED_IP
+        - YOURLS_PATH
+        - YOURLS_USERS
+        - SESSION_TIMEOUT
+        - LOGIN_MAX_ATTEMPTS
+        - LOGIN_LOCKOUT_TIME
+        - API_RATE_LIMIT
+        - API_RATE_WINDOW
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # YOURLSのphpassライブラリ（PasswordHash）は実行時にrequireされる外部クラスのため
+        # 静的解析では解決できない。認証処理の正当な外部依存として除外する。
+        -
+            identifier: class.notFound
+            message: '#PasswordHash#'
+            path: auth.php
+        # YOURLS_USERS が非配列で設定された場合に備えた防御的チェック。
+        # 解析用スタブでは常に array 扱いになるため誤検知となる。
+        -
+            identifier: function.alreadyNarrowedType
+            path: auth.php
