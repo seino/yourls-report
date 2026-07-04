@@ -20,7 +20,7 @@ initApplication();
 $pdo = getDatabaseConnection();
 
 // パラメータ取得
-$keyword = sanitizeInput($_GET['keyword'] ?? '', 50);
+$keyword = sanitizeInput($_GET['keyword'] ?? '', MAX_KEYWORD_LENGTH);
 $dateRange = normalizeDateRange(
     $_GET['start_date'] ?? null,
     $_GET['end_date'] ?? null
@@ -69,8 +69,8 @@ function getDailyClicksByUrl($pdo, $keyword, $start, $end, $excluded_ip)
         'start' => $start,
         'end' => $end,
     ];
+    $sql .= excludedIpClause($excluded_ip);
     if ($excluded_ip !== '') {
-        $sql .= " AND ip_address != :excluded_ip";
         $params['excluded_ip'] = $excluded_ip;
     }
 
@@ -97,8 +97,8 @@ function getTotalClicksByUrl($pdo, $keyword, $start, $end, $excluded_ip)
         'start' => $start,
         'end' => $end,
     ];
+    $sql .= excludedIpClause($excluded_ip);
     if ($excluded_ip !== '') {
-        $sql .= " AND ip_address != :excluded_ip";
         $params['excluded_ip'] = $excluded_ip;
     }
 
@@ -124,8 +124,8 @@ function getReferrersByUrl($pdo, $keyword, $start, $end, $excluded_ip)
         'start' => $start,
         'end' => $end,
     ];
+    $sql .= excludedIpClause($excluded_ip);
     if ($excluded_ip !== '') {
-        $sql .= " AND ip_address != :excluded_ip";
         $params['excluded_ip'] = $excluded_ip;
     }
 

@@ -4,6 +4,54 @@
  * 共通ユーティリティ関数
  */
 
+// 一覧表示件数の既定値・範囲
+if (!defined('DEFAULT_PER_PAGE')) {
+    define('DEFAULT_PER_PAGE', 20);
+}
+if (!defined('MIN_PER_PAGE')) {
+    define('MIN_PER_PAGE', 5);
+}
+if (!defined('MAX_PER_PAGE')) {
+    define('MAX_PER_PAGE', 100);
+}
+// keyword（短縮URLキー）の最大文字数
+if (!defined('MAX_KEYWORD_LENGTH')) {
+    define('MAX_KEYWORD_LENGTH', 50);
+}
+// 検索キーワードの最大文字数
+if (!defined('MAX_SEARCH_KEYWORD_LENGTH')) {
+    define('MAX_SEARCH_KEYWORD_LENGTH', 100);
+}
+// URL表示時の切り詰め長
+if (!defined('URL_DISPLAY_MAX_LENGTH')) {
+    define('URL_DISPLAY_MAX_LENGTH', 60);
+}
+
+/**
+ * 除外IP条件のSQL断片を返す
+ * 除外IPが未設定（空文字）の場合は空文字を返す
+ *
+ * @param string $excludedIp 除外IPアドレス
+ * @param string $column 比較対象カラム名（テーブルエイリアス含む）
+ * @return string SQL断片（" AND {column} != :excluded_ip" または ""）
+ */
+function excludedIpClause($excludedIp, $column = 'ip_address')
+{
+    return $excludedIp !== '' ? " AND {$column} != :excluded_ip" : '';
+}
+
+/**
+ * LIKE検索用にワイルドカード文字（% _ \）をエスケープする
+ * MySQLのデフォルトエスケープ文字（バックスラッシュ）を利用する
+ *
+ * @param string $value 検索文字列
+ * @return string エスケープ済み文字列
+ */
+function escapeLikeWildcards($value)
+{
+    return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], (string) $value);
+}
+
 /**
  * 日付形式を検証
  *
@@ -275,18 +323,21 @@ function isSafeRedirectUrl($url)
         return false;
     }
 
-    // プロトコル相対URL（//example.com）をブロック
-    if (strpos($url, '//') === 0) {
+    // バックスラッシュはブラウザによりスラッシュとして正規化され得るため統一して判定
+    $normalized = str_replace('\\', '/', $url);
+
+    // プロトコル相対URL（//example.com、/\example.com 等）をブロック
+    if (strpos($normalized, '//') === 0) {
         return false;
     }
 
     // 絶対URL（http://、https://等）をブロック
-    if (preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*:/', $url)) {
+    if (preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*:/', $normalized)) {
         return false;
     }
 
     // 相対パス（/で始まる）のみ許可
-    if (strpos($url, '/') !== 0) {
+    if (strpos($normalized, '/') !== 0) {
         return false;
     }
 
