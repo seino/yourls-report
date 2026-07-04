@@ -20,8 +20,7 @@ $pdo = getDatabaseConnection();
 $keyword = sanitizeInput($_GET['keyword'] ?? '', 50);
 
 if (empty($keyword)) {
-    http_response_code(400);
-    header('Location: yourls_report.php');
+    header('Location: yourls_report.php', true, 302);
     exit;
 }
 

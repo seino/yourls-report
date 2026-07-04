@@ -9,9 +9,9 @@
  * - 日別推移: api.php?action=daily&start_date=2025-11-10&end_date=2025-12-10
  * - リファラー: api.php?action=referrers&start_date=2025-11-10&end_date=2025-12-10
  *
- * 認証: APIキーをヘッダーまたはパラメータで送信
+ * 認証: APIキーをリクエストヘッダーで送信
  * - ヘッダー: X-API-Key: your_api_key
- * - パラメータ: api.php?api_key=your_api_key&action=stats
+ * ログインが有効な場合（REQUIRE_LOGIN=true）はログインセッションでもアクセス可能。
  */
 
 // 設定ファイル読み込み
@@ -23,8 +23,9 @@ if (!file_exists($config_file)) {
 }
 require_once $config_file;
 
-// 共通ユーティリティ読み込み
+// 共通ユーティリティ・認証処理読み込み
 require_once __DIR__ . '/utils.php';
+require_once __DIR__ . '/auth.php';
 
 // 共通初期化
 initApplication();
@@ -111,12 +112,24 @@ function checkRateLimit()
 // レート制限チェック
 checkRateLimit();
 
-// API認証（API_KEYが設定されている場合のみ有効）
+// API認証（フェイルクローズ: 有効なAPIキー or ログインセッションが必須）
+$authenticated = false;
+
+// APIキー認証（設定されている場合のみ・ヘッダーのみ受理）
 if (defined('API_KEY') && API_KEY !== '') {
-    $provided_key = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? '';
-    if (!hash_equals(API_KEY, $provided_key)) {
-        sendError('認証エラー: 無効なAPIキーです', 401);
+    $provided_key = $_SERVER['HTTP_X_API_KEY'] ?? '';
+    if (hash_equals(API_KEY, $provided_key)) {
+        $authenticated = true;
     }
+}
+
+// ログインセッション認証（REQUIRE_LOGIN=true の場合のみ有効）
+if (!$authenticated && isLoginRequired() && isLoggedIn()) {
+    $authenticated = true;
+}
+
+if (!$authenticated) {
+    sendError('認証エラー: 有効なAPIキーまたはログインが必要です', 401);
 }
 
 // データベース接続

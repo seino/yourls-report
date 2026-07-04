@@ -92,16 +92,16 @@ if ($export_type === 'detail') {
 
     while ($row = $stmt->fetch()) {
         fputcsv($output, [
-            $row['keyword'] ?: $row['shorturl'],
-            $row['shorturl'],
-            $row['url'],
-            $row['title'],
+            sanitizeCsvField($row['keyword'] ?: $row['shorturl']),
+            sanitizeCsvField($row['shorturl']),
+            sanitizeCsvField($row['url']),
+            sanitizeCsvField($row['title']),
             $row['click_time'],
-            $row['referrer'],
-            $row['user_agent'],
-            $row['ip_address'],
+            sanitizeCsvField($row['referrer']),
+            sanitizeCsvField($row['user_agent']),
+            sanitizeCsvField($row['ip_address']),
             $row['country_code'],
-            $row['user']
+            sanitizeCsvField($row['user'])
         ]);
     }
 } elseif ($export_type === 'daily') {
@@ -188,13 +188,13 @@ if ($export_type === 'detail') {
 
     while ($row = $stmt->fetch()) {
         fputcsv($output, [
-            $row['keyword'] ?: $row['shorturl'],
-            $row['url'],
-            $row['title'],
+            sanitizeCsvField($row['keyword'] ?: $row['shorturl']),
+            sanitizeCsvField($row['url']),
+            sanitizeCsvField($row['title']),
             $row['click_count'],
             $row['first_click'],
             $row['last_click'],
-            $row['referrers']
+            sanitizeCsvField($row['referrers'])
         ]);
     }
 }

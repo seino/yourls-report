@@ -152,11 +152,15 @@ function verifyPassword($inputPassword, $storedPassword)
 }
 
 /**
- * ログイン試行回数のキーを取得
+ * ログイン試行回数の記録ファイルパスを取得
+ *
+ * セッションではなくサーバー側の永続ファイルにIP単位で記録することで、
+ * Cookieを送らず毎回新規セッションを発行するブルートフォース回避を防ぐ。
  */
-function getLoginAttemptKey()
+function getLoginAttemptFile()
 {
-    return 'login_attempts_' . md5($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    return sys_get_temp_dir() . '/yourls_report_login_' . md5($ip) . '.json';
 }
 
 /**
@@ -164,11 +168,17 @@ function getLoginAttemptKey()
  */
 function getLoginAttempts()
 {
-    $key = getLoginAttemptKey();
-    if (!isset($_SESSION[$key])) {
+    $file = getLoginAttemptFile();
+    if (!is_file($file)) {
         return ['count' => 0, 'first_attempt' => 0];
     }
-    return $_SESSION[$key];
+
+    $data = json_decode((string) file_get_contents($file), true);
+    if (!is_array($data) || !isset($data['count'], $data['first_attempt'])) {
+        return ['count' => 0, 'first_attempt' => 0];
+    }
+
+    return ['count' => (int) $data['count'], 'first_attempt' => (int) $data['first_attempt']];
 }
 
 /**
@@ -176,7 +186,6 @@ function getLoginAttempts()
  */
 function recordLoginAttempt()
 {
-    $key = getLoginAttemptKey();
     $attempts = getLoginAttempts();
 
     // ロックアウト時間が経過していたらリセット
@@ -189,7 +198,7 @@ function recordLoginAttempt()
     }
     $attempts['count']++;
 
-    $_SESSION[$key] = $attempts;
+    file_put_contents(getLoginAttemptFile(), json_encode($attempts), LOCK_EX);
 }
 
 /**
@@ -197,8 +206,10 @@ function recordLoginAttempt()
  */
 function resetLoginAttempts()
 {
-    $key = getLoginAttemptKey();
-    unset($_SESSION[$key]);
+    $file = getLoginAttemptFile();
+    if (is_file($file)) {
+        @unlink($file);
+    }
 }
 
 /**
@@ -260,6 +271,11 @@ function login($username, $password)
 
     // ログイン成功 - 試行回数リセット
     resetLoginAttempts();
+
+    // セッション固定攻撃対策: 認証成功時にセッションIDを再生成
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
 
     $_SESSION['logged_in'] = true;
     $_SESSION['username'] = $username;
