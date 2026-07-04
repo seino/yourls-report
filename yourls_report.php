@@ -82,7 +82,7 @@ function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
         $sql .= " AND l.ip_address != :excluded_ip";
     }
     if (!empty($search_keyword)) {
-        $sql .= " AND (u.title LIKE :search_keyword OR u.url LIKE :search_keyword)";
+        $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
     }
 
     $stmt = $pdo->prepare($sql);
@@ -92,7 +92,8 @@ function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
         $stmt->bindValue(':excluded_ip', $excluded_ip);
     }
     if (!empty($search_keyword)) {
-        $stmt->bindValue(':search_keyword', '%' . $search_keyword . '%');
+        $stmt->bindValue(':search_title', '%' . $search_keyword . '%');
+        $stmt->bindValue(':search_url', '%' . $search_keyword . '%');
     }
     $stmt->execute();
     return $stmt->fetch()['total'];
@@ -118,7 +119,7 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_
         $sql .= " AND l.ip_address != :excluded_ip";
     }
     if (!empty($search_keyword)) {
-        $sql .= " AND (u.title LIKE :search_keyword OR u.url LIKE :search_keyword)";
+        $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
     }
 
     $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
@@ -134,7 +135,8 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_
     $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     if (!empty($search_keyword)) {
-        $stmt->bindValue(':search_keyword', '%' . $search_keyword . '%');
+        $stmt->bindValue(':search_title', '%' . $search_keyword . '%');
+        $stmt->bindValue(':search_url', '%' . $search_keyword . '%');
     }
     $stmt->execute();
     return $stmt->fetchAll();
@@ -741,12 +743,15 @@ $country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded
                 </div>
 
                 <!-- 国別統計 -->
-                <?php if (!empty($country_stats)): ?>
-                    <div class="section">
-                        <h2>国別アクセス</h2>
-                        <div class="chart-container">
+                <div class="section">
+                    <h2>国別アクセス</h2>
+                    <div class="chart-container">
+                        <?php if (empty($country_stats)): ?>
+                            <p style="color: rgba(0, 0, 0, 0.6); font-size: 14px;">この期間のデータはありません。</p>
+                        <?php else: ?>
                             <?php
                             $max_country = max(array_column($country_stats, 'clicks'));
+                            $max_country = $max_country > 0 ? $max_country : 1;
                             foreach ($country_stats as $row):
                                 $percentage = ($row['clicks'] / $max_country) * 100;
                             ?>
@@ -757,9 +762,9 @@ $country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded
                                     </div>
                                 </div>
                             <?php endforeach; ?>
-                        </div>
+                        <?php endif; ?>
                     </div>
-                <?php endif; ?>
+                </div>
 
             </div>
         </div>
