@@ -49,7 +49,7 @@ if (!defined('API_RATE_WINDOW')) {
 /**
  * レスポンスを返す
  */
-function sendResponse($data, $status = 200)
+function sendResponse($data, $status = 200): never
 {
     http_response_code($status);
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -59,7 +59,7 @@ function sendResponse($data, $status = 200)
 /**
  * エラーレスポンスを返す
  */
-function sendError($message, $status = 400)
+function sendError($message, $status = 400): never
 {
     sendResponse(['error' => $message], $status);
 }
@@ -195,7 +195,6 @@ switch ($action) {
         $stats['avg_per_day'] = round($stats['total_clicks'] / $days, 2);
 
         sendResponse($stats);
-        break;
 
     case 'top_urls':
         // トップURL
@@ -228,7 +227,6 @@ switch ($action) {
         $urls = $stmt->fetchAll();
 
         sendResponse($urls);
-        break;
 
     case 'daily':
         // 日別推移
@@ -254,7 +252,6 @@ switch ($action) {
         $daily = $stmt->fetchAll();
 
         sendResponse($daily);
-        break;
 
     case 'referrers':
         // リファラー統計
@@ -278,7 +275,6 @@ switch ($action) {
         $referrers = $stmt->fetchAll();
 
         sendResponse($referrers);
-        break;
 
     case 'countries':
         // 国別統計
@@ -305,7 +301,6 @@ switch ($action) {
         $countries = $stmt->fetchAll();
 
         sendResponse($countries);
-        break;
 
     case 'url_detail':
         // 特定URLの詳細
@@ -370,7 +365,6 @@ switch ($action) {
             'stats' => $stats,
             'daily' => $daily
         ]);
-        break;
 
     case 'realtime':
         // リアルタイム（直近1時間）
@@ -397,7 +391,6 @@ switch ($action) {
         $recent = $stmt->fetchAll();
 
         sendResponse($recent);
-        break;
 
     default:
         sendError('無効なアクションです。利用可能: stats, top_urls, daily, referrers, countries, url_detail, realtime');

@@ -16,3 +16,12 @@ config.php
 # OS生成ファイル
 .DS_Store
 Thumbs.db
+
+# Composer 依存
+/vendor/
+
+# テスト・静的解析のキャッシュ
+.phpunit.result.cache
+.phpunit.cache/
+.phpstan.cache/
+coverage/

@@ -1,0 +1,29 @@
+{
+    "name": "seino/yourls-report",
+    "description": "YOURLS 集計レポートシステム",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload-dev": {
+        "files": [
+            "utils.php"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse",
+        "check": [
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

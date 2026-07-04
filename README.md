@@ -15,9 +15,11 @@ YOURLSの短縮URLアクセス解析レポートシステム
 
 ## 必要要件
 
-- PHP 7.4以上
+- PHP 8.1以上
 - MySQL 5.7以上
 - YOURLS 1.7以上
+
+> 開発ツール（PHPUnit 11）を使う場合は PHP 8.2 以上が必要です。
 
 ## インストール
 
@@ -85,11 +87,48 @@ yourls-report/
 ├── export_csv.php           # CSV出力（URL別、詳細、日別）
 ├── export_url_daily_csv.php # URL別日別CSV出力
 ├── api.php                  # JSON API
+├── utils.php                # 共通ユーティリティ
+├── composer.json            # 依存・スクリプト定義
+├── phpstan.neon             # 静的解析設定
+├── phpunit.xml              # テスト設定
+├── tests/                   # ユニットテスト
+├── .github/workflows/       # CI（GitHub Actions）
 ├── config.php               # 設定ファイル（Git管理外）
 ├── config.sample.php        # 設定サンプル
 ├── .gitignore
 └── README.md
 ```
+
+## 開発
+
+### セットアップ
+
+```bash
+composer install
+```
+
+### テスト（PHPUnit）
+
+`config.php` に依存しない純粋なユーティリティ関数（`utils.php`）を対象にテストを実行する。
+
+```bash
+composer test          # または ./vendor/bin/phpunit
+```
+
+### 静的解析（PHPStan / level 5）
+
+```bash
+composer analyse       # または ./vendor/bin/phpstan analyse
+```
+
+### まとめて実行
+
+```bash
+composer check         # analyse → test
+```
+
+`main` への push と Pull Request では、GitHub Actions（`.github/workflows/ci.yml`）が
+PHP 8.2 / 8.3 / 8.4 上で `composer validate` → PHPStan → PHPUnit を実行する。
 
 ## 使い方
 
@@ -121,12 +160,15 @@ yourls-report/
 
 ### 認証
 
-`config.php`で`API_KEY`を設定すると、API認証が有効になります。
+API はフェイルクローズで動作し、**有効なAPIキー、またはログインセッションのいずれか**が必須です。
+どちらも無い場合は 401 を返します（`API_KEY` 未設定かつ `REQUIRE_LOGIN=false` の場合、API は常に 401）。
 
-認証方法（どちらか一方）:
+認証方法:
 
-- HTTPヘッダー: `X-API-Key: your_api_key`
-- クエリパラメータ: `?api_key=your_api_key`
+- HTTPヘッダー: `X-API-Key: your_api_key`（推奨。キーがログや Referer に残らない）
+- `REQUIRE_LOGIN=true` のとき、ログイン済みセッションでもアクセス可能
+
+> セキュリティ上の理由から、クエリパラメータ（`?api_key=`）でのキー送信は廃止しました。
 
 ### エンドポイント
 
