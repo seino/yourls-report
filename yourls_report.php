@@ -29,9 +29,9 @@ $end_date = $dateRange['end_date'];
 $start_datetime = $dateRange['start_datetime'];
 $end_datetime = $dateRange['end_datetime'];
 
-// 表示件数の検証（5〜100の範囲）
+// 表示件数の検証（MIN_PER_PAGE〜MAX_PER_PAGEの範囲）
 $per_page = filter_input(INPUT_GET, 'per_page', FILTER_VALIDATE_INT, [
-    'options' => ['default' => 20, 'min_range' => 5, 'max_range' => 100]
+    'options' => ['default' => DEFAULT_PER_PAGE, 'min_range' => MIN_PER_PAGE, 'max_range' => MAX_PER_PAGE]
 ]);
 
 // ページ番号の検証
@@ -40,7 +40,7 @@ $page = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT, [
 ]);
 
 // 検索キーワードのサニタイズ
-$search_keyword = sanitizeInput($_GET['search_keyword'] ?? '', 100);
+$search_keyword = sanitizeInput($_GET['search_keyword'] ?? '', MAX_SEARCH_KEYWORD_LENGTH);
 
 // 除外IP
 $excluded_ip = getExcludedIp();
@@ -56,10 +56,10 @@ function getBasicStats($pdo, $start, $end, $excluded_ip)
                 COUNT(DISTINCT ip_address) as unique_ips
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE click_time BETWEEN :start AND :end";
+    $sql .= excludedIpClause($excluded_ip);
 
     $params = ['start' => $start, 'end' => $end];
     if ($excluded_ip !== '') {
-        $sql .= " AND ip_address != :excluded_ip";
         $params['excluded_ip'] = $excluded_ip;
     }
 
@@ -78,9 +78,7 @@ function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
             WHERE l.click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip !== '') {
-        $sql .= " AND l.ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
     if (!empty($search_keyword)) {
         $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
     }
@@ -92,8 +90,9 @@ function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
         $stmt->bindValue(':excluded_ip', $excluded_ip);
     }
     if (!empty($search_keyword)) {
-        $stmt->bindValue(':search_title', '%' . $search_keyword . '%');
-        $stmt->bindValue(':search_url', '%' . $search_keyword . '%');
+        $like = '%' . escapeLikeWildcards($search_keyword) . '%';
+        $stmt->bindValue(':search_title', $like);
+        $stmt->bindValue(':search_url', $like);
     }
     $stmt->execute();
     return $stmt->fetch()['total'];
@@ -115,9 +114,7 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
             WHERE l.click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip !== '') {
-        $sql .= " AND l.ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
     if (!empty($search_keyword)) {
         $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
     }
@@ -135,8 +132,9 @@ function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_
     $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     if (!empty($search_keyword)) {
-        $stmt->bindValue(':search_title', '%' . $search_keyword . '%');
-        $stmt->bindValue(':search_url', '%' . $search_keyword . '%');
+        $like = '%' . escapeLikeWildcards($search_keyword) . '%';
+        $stmt->bindValue(':search_title', $like);
+        $stmt->bindValue(':search_url', $like);
     }
     $stmt->execute();
     return $stmt->fetchAll();
@@ -153,9 +151,7 @@ function getCountryStats($pdo, $start, $end, $excluded_ip, $limit = 10)
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip !== '') {
-        $sql .= " AND ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip);
 
     $sql .= " GROUP BY country_code
             ORDER BY clicks DESC
@@ -682,7 +678,7 @@ $country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded
                                     <td>
                                         <strong><?= htmlspecialchars($row['keyword'] ?: $row['shorturl']) ?></strong><br>
                                         <a href="<?= htmlspecialchars(safeUrl($row['url'])) ?>" target="_blank" rel="noopener noreferrer" class="url-link" style="font-size: 12px;">
-                                            <?= htmlspecialchars(substr($row['url'], 0, 60)) ?><?= strlen($row['url']) > 60 ? '...' : '' ?>
+                                            <?= htmlspecialchars(substr($row['url'], 0, URL_DISPLAY_MAX_LENGTH)) ?><?= strlen($row['url']) > URL_DISPLAY_MAX_LENGTH ? '...' : '' ?>
                                         </a>
                                     </td>
                                     <td>

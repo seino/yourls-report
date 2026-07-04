@@ -30,6 +30,9 @@ require_once __DIR__ . '/auth.php';
 // 共通初期化
 initApplication();
 
+// セキュリティヘッダー（Content-Type-Options等）
+setSecurityHeaders(false);
+
 // CORS設定（本番環境では適切なオリジンに制限してください）
 $allowed_origin = defined('API_ALLOWED_ORIGIN') ? API_ALLOWED_ORIGIN : '*';
 header('Access-Control-Allow-Origin: ' . $allowed_origin);
@@ -146,8 +149,8 @@ try {
 
 // パラメータ取得
 $action = $_GET['action'] ?? 'stats';
-$limit = filter_var($_GET['limit'] ?? 20, FILTER_VALIDATE_INT, [
-    'options' => ['default' => 20, 'min_range' => 1, 'max_range' => 100]
+$limit = filter_var($_GET['limit'] ?? DEFAULT_PER_PAGE, FILTER_VALIDATE_INT, [
+    'options' => ['default' => DEFAULT_PER_PAGE, 'min_range' => 1, 'max_range' => MAX_PER_PAGE]
 ]);
 
 // 日付パラメータの検証と正規化
@@ -174,13 +177,11 @@ switch ($action) {
                 FROM " . YOURLS_DB_PREFIX . "log
                 WHERE click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip);
 
         $stmt = $pdo->prepare($sql);
         $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $params['excluded_ip'] = $excluded_ip;
         }
         $stmt->execute($params);
@@ -210,9 +211,7 @@ switch ($action) {
                 LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
                 WHERE l.click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND l.ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
 
         $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
                 ORDER BY click_count DESC
@@ -221,7 +220,7 @@ switch ($action) {
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':start', $start_datetime);
         $stmt->bindValue(':end', $end_datetime);
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $stmt->bindValue(':excluded_ip', $excluded_ip);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -241,16 +240,14 @@ switch ($action) {
                 FROM " . YOURLS_DB_PREFIX . "log
                 WHERE click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip);
 
         $sql .= " GROUP BY DATE(click_time)
                 ORDER BY date ASC";
 
         $stmt = $pdo->prepare($sql);
         $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $params['excluded_ip'] = $excluded_ip;
         }
         $stmt->execute($params);
@@ -262,9 +259,7 @@ switch ($action) {
     case 'referrers':
         // リファラー統計
         $base_where = "click_time BETWEEN :start AND :end";
-        if ($excluded_ip) {
-            $base_where .= " AND ip_address != :excluded_ip";
-        }
+        $base_where .= excludedIpClause($excluded_ip);
 
         $sql = "SELECT
                     " . getReferrerCaseSql('referrer_type', false) . ",
@@ -276,7 +271,7 @@ switch ($action) {
 
         $stmt = $pdo->prepare($sql);
         $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $params['excluded_ip'] = $excluded_ip;
         }
         $stmt->execute($params);
@@ -293,9 +288,7 @@ switch ($action) {
                 FROM " . YOURLS_DB_PREFIX . "log
                 WHERE click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip);
 
         $sql .= " GROUP BY country_code
                 ORDER BY clicks DESC
@@ -304,7 +297,7 @@ switch ($action) {
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':start', $start_datetime);
         $stmt->bindValue(':end', $end_datetime);
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $stmt->bindValue(':excluded_ip', $excluded_ip);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -316,7 +309,7 @@ switch ($action) {
 
     case 'url_detail':
         // 特定URLの詳細
-        $keyword = sanitizeInput($_GET['keyword'] ?? '', 50);
+        $keyword = sanitizeInput($_GET['keyword'] ?? '', MAX_KEYWORD_LENGTH);
         if (empty($keyword)) {
             sendError('keywordパラメータが必要です');
         }
@@ -341,9 +334,7 @@ switch ($action) {
                 WHERE shorturl = :keyword
                 AND click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip);
 
         $stmt = $pdo->prepare($sql);
         $params = [
@@ -351,7 +342,7 @@ switch ($action) {
             'start' => $start_datetime,
             'end' => $end_datetime
         ];
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $params['excluded_ip'] = $excluded_ip;
         }
         $stmt->execute($params);
@@ -365,9 +356,7 @@ switch ($action) {
                 WHERE shorturl = :keyword
                 AND click_time BETWEEN :start AND :end";
 
-        if ($excluded_ip) {
-            $sql .= " AND ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip);
 
         $sql .= " GROUP BY DATE(click_time)
                 ORDER BY date ASC";
@@ -394,15 +383,13 @@ switch ($action) {
                 LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
                 WHERE l.click_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)";
 
-        if ($excluded_ip) {
-            $sql .= " AND l.ip_address != :excluded_ip";
-        }
+        $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
 
         $sql .= " ORDER BY l.click_time DESC
                 LIMIT 50";
 
         $stmt = $pdo->prepare($sql);
-        if ($excluded_ip) {
+        if ($excluded_ip !== '') {
             $stmt->execute(['excluded_ip' => $excluded_ip]);
         } else {
             $stmt->execute();

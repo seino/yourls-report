@@ -10,6 +10,9 @@ requireAuth();
 
 // 設定ファイルとユーティリティはauth.phpで読み込み済み
 
+// セキュリティヘッダー
+setSecurityHeaders(false);
+
 // 共通初期化
 initApplication();
 
@@ -17,7 +20,7 @@ initApplication();
 $pdo = getDatabaseConnection();
 
 // パラメータ取得
-$keyword = sanitizeInput($_GET['keyword'] ?? '', 50);
+$keyword = sanitizeInput($_GET['keyword'] ?? '', MAX_KEYWORD_LENGTH);
 
 if (empty($keyword)) {
     header('Location: yourls_report.php', true, 302);
@@ -49,8 +52,8 @@ $params = [
     'start' => $start_datetime,
     'end' => $end_datetime,
 ];
+$sql .= excludedIpClause($excluded_ip);
 if ($excluded_ip !== '') {
-    $sql .= " AND ip_address != :excluded_ip";
     $params['excluded_ip'] = $excluded_ip;
 }
 

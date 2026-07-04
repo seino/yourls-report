@@ -10,6 +10,9 @@ requireAuth();
 
 // 設定ファイルとユーティリティはauth.phpで読み込み済み
 
+// セキュリティヘッダー
+setSecurityHeaders(false);
+
 // 共通初期化
 initApplication();
 
@@ -77,15 +80,13 @@ if ($export_type === 'detail') {
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
             WHERE l.click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip) {
-        $sql .= " AND l.ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
 
     $sql .= " ORDER BY l.click_time DESC";
 
     $stmt = $pdo->prepare($sql);
     $params = ['start' => $start_datetime, 'end' => $end_datetime];
-    if ($excluded_ip) {
+    if ($excluded_ip !== '') {
         $params['excluded_ip'] = $excluded_ip;
     }
     $stmt->execute($params);
@@ -121,16 +122,14 @@ if ($export_type === 'detail') {
             FROM " . YOURLS_DB_PREFIX . "log
             WHERE click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip) {
-        $sql .= " AND ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip);
 
     $sql .= " GROUP BY DATE(click_time)
             ORDER BY date ASC";
 
     $stmt = $pdo->prepare($sql);
     $params = ['start' => $start_datetime, 'end' => $end_datetime];
-    if ($excluded_ip) {
+    if ($excluded_ip !== '') {
         $params['excluded_ip'] = $excluded_ip;
     }
     $stmt->execute($params);
@@ -172,16 +171,14 @@ if ($export_type === 'detail') {
             LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
             WHERE l.click_time BETWEEN :start AND :end";
 
-    if ($excluded_ip) {
-        $sql .= " AND l.ip_address != :excluded_ip";
-    }
+    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
 
     $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
             ORDER BY click_count DESC";
 
     $stmt = $pdo->prepare($sql);
     $params = ['start' => $start_datetime, 'end' => $end_datetime];
-    if ($excluded_ip) {
+    if ($excluded_ip !== '') {
         $params['excluded_ip'] = $excluded_ip;
     }
     $stmt->execute($params);
