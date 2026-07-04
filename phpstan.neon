@@ -7,6 +7,7 @@ parameters:
         - export_url_daily_csv.php
         - login.php
         - logout.php
+        - password.php
         - url_detail.php
         - utils.php
         - yourls_report.php
@@ -35,7 +36,7 @@ parameters:
         -
             identifier: class.notFound
             message: '#PasswordHash#'
-            path: auth.php
+            path: password.php
         # YOURLS_USERS が非配列で設定された場合に備えた防御的チェック。
         # 解析用スタブでは常に array 扱いになるため誤検知となる。
         -

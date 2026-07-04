@@ -12,7 +12,8 @@
     },
     "autoload-dev": {
         "files": [
-            "utils.php"
+            "utils.php",
+            "password.php"
         ]
     },
     "scripts": {

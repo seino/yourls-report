@@ -12,8 +12,9 @@ if (!file_exists($config_file)) {
 }
 require_once $config_file;
 
-// 共通ユーティリティ読み込み
+// 共通ユーティリティ・パスワード検証ロジック読み込み
 require_once __DIR__ . '/utils.php';
+require_once __DIR__ . '/password.php';
 
 // デフォルト設定値
 if (!defined('SESSION_TIMEOUT')) {
@@ -88,67 +89,6 @@ function getYourlsUsers()
     }
 
     return $users;
-}
-
-/**
- * ユーザー・パスワード配列の内容をパース
- *
- * @param string $arrayContent 配列の中身の文字列
- * @return array ['username' => 'password', ...]
- */
-function parseUserPasswordArray($arrayContent)
-{
-    $users = [];
-
-    // 'username' => 'password' または "username" => "password" の形式を解析
-    // 複数行、コメント混在にも対応
-    preg_match_all(
-        "/['\"]([^'\"]+)['\"]\s*=>\s*['\"]([^'\"]+)['\"]/",
-        $arrayContent,
-        $userMatches,
-        PREG_SET_ORDER
-    );
-
-    foreach ($userMatches as $match) {
-        $users[$match[1]] = $match[2];
-    }
-
-    return $users;
-}
-
-/**
- * パスワードを検証（プレーンテキストまたはphpassハッシュ）
- */
-function verifyPassword($inputPassword, $storedPassword)
-{
-    // プレーンテキストの場合
-    if ($inputPassword === $storedPassword) {
-        return true;
-    }
-
-    // phpassハッシュの場合（$P$で始まる）
-    if (strpos($storedPassword, '$P$') === 0 || strpos($storedPassword, '$2') === 0) {
-        // password_verify for bcrypt
-        if (strpos($storedPassword, '$2') === 0) {
-            return password_verify($inputPassword, $storedPassword);
-        }
-
-        // phpass形式のハッシュ検証
-        // YOURLSのphpassライブラリを使用
-        $phpass_file = defined('YOURLS_PATH') ? YOURLS_PATH . '/includes/phpass/PasswordHash.php' : '';
-        if (file_exists($phpass_file)) {
-            require_once $phpass_file;
-            $hasher = new PasswordHash(8, true);
-            return $hasher->CheckPassword($inputPassword, $storedPassword);
-        }
-    }
-
-    // MD5ハッシュの場合（32文字の16進数）
-    if (preg_match('/^[a-f0-9]{32}$/i', $storedPassword)) {
-        return md5($inputPassword) === $storedPassword;
-    }
-
-    return false;
 }
 
 /**
