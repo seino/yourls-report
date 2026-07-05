@@ -6,6 +6,7 @@
 
 // 認証チェック
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/StatsRepository.php';
 requireAuth();
 
 // 設定ファイルとユーティリティはauth.phpで読み込み済み
@@ -45,136 +46,17 @@ $search_keyword = sanitizeInput($_GET['search_keyword'] ?? '', MAX_SEARCH_KEYWOR
 // 除外IP
 $excluded_ip = getExcludedIp();
 
-/**
- * 基本統計を取得
- */
-function getBasicStats($pdo, $start, $end, $excluded_ip)
-{
-    $sql = "SELECT
-                COUNT(*) as total_clicks,
-                COUNT(DISTINCT shorturl) as unique_urls,
-                COUNT(DISTINCT ip_address) as unique_ips
-            FROM " . YOURLS_DB_PREFIX . "log
-            WHERE click_time BETWEEN :start AND :end";
-    $sql .= excludedIpClause($excluded_ip);
-
-    $params = ['start' => $start, 'end' => $end];
-    if ($excluded_ip !== '') {
-        $params['excluded_ip'] = $excluded_ip;
-    }
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetch();
-}
-
-/**
- * URL別のクリック数トップを取得
- */
-function getTopUrlsCount($pdo, $start, $end, $excluded_ip, $search_keyword = '')
-{
-    $sql = "SELECT COUNT(DISTINCT l.shorturl) as total
-            FROM " . YOURLS_DB_PREFIX . "log l
-            LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-            WHERE l.click_time BETWEEN :start AND :end";
-
-    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
-    if (!empty($search_keyword)) {
-        $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
-    }
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(':start', $start);
-    $stmt->bindValue(':end', $end);
-    if ($excluded_ip !== '') {
-        $stmt->bindValue(':excluded_ip', $excluded_ip);
-    }
-    if (!empty($search_keyword)) {
-        $like = '%' . escapeLikeWildcards($search_keyword) . '%';
-        $stmt->bindValue(':search_title', $like);
-        $stmt->bindValue(':search_url', $like);
-    }
-    $stmt->execute();
-    return $stmt->fetch()['total'];
-}
-
-function getTopUrls($pdo, $start, $end, $per_page, $page, $excluded_ip, $search_keyword = '')
-{
-    $offset = ($page - 1) * $per_page;
-
-    $sql = "SELECT
-                l.shorturl,
-                u.keyword,
-                u.url,
-                u.title,
-                COUNT(*) as click_count,
-                MIN(l.click_time) as first_click,
-                MAX(l.click_time) as last_click
-            FROM " . YOURLS_DB_PREFIX . "log l
-            LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-            WHERE l.click_time BETWEEN :start AND :end";
-
-    $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
-    if (!empty($search_keyword)) {
-        $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
-    }
-
-    $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
-            ORDER BY click_count DESC
-            LIMIT :limit OFFSET :offset";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(':start', $start);
-    $stmt->bindValue(':end', $end);
-    if ($excluded_ip !== '') {
-        $stmt->bindValue(':excluded_ip', $excluded_ip);
-    }
-    $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    if (!empty($search_keyword)) {
-        $like = '%' . escapeLikeWildcards($search_keyword) . '%';
-        $stmt->bindValue(':search_title', $like);
-        $stmt->bindValue(':search_url', $like);
-    }
-    $stmt->execute();
-    return $stmt->fetchAll();
-}
-
-/**
- * 国別の集計
- */
-function getCountryStats($pdo, $start, $end, $excluded_ip, $limit = 10)
-{
-    $sql = "SELECT
-                country_code,
-                COUNT(*) as clicks
-            FROM " . YOURLS_DB_PREFIX . "log
-            WHERE click_time BETWEEN :start AND :end";
-
-    $sql .= excludedIpClause($excluded_ip);
-
-    $sql .= " GROUP BY country_code
-            ORDER BY clicks DESC
-            LIMIT :limit";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(':start', $start);
-    $stmt->bindValue(':end', $end);
-    if ($excluded_ip !== '') {
-        $stmt->bindValue(':excluded_ip', $excluded_ip);
-    }
-    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
-}
+// 集計リポジトリ
+$repo = new StatsRepository($pdo, YOURLS_DB_PREFIX, $excluded_ip);
 
 // データ取得
-$basic_stats = getBasicStats($pdo, $start_datetime, $end_datetime, $excluded_ip);
-$total_urls = getTopUrlsCount($pdo, $start_datetime, $end_datetime, $excluded_ip, $search_keyword);
+$basic_stats = $repo->getBasicStats($start_datetime, $end_datetime);
+$total_urls = $repo->getTopUrlsCount($start_datetime, $end_datetime, $search_keyword);
 $total_pages = ceil($total_urls / $per_page);
 if ($page > $total_pages && $total_pages > 0) $page = $total_pages;
-$top_urls = getTopUrls($pdo, $start_datetime, $end_datetime, $per_page, $page, $excluded_ip, $search_keyword);
-$country_stats = getCountryStats($pdo, $start_datetime, $end_datetime, $excluded_ip);
+$offset = ($page - 1) * $per_page;
+$top_urls = $repo->getTopUrls($start_datetime, $end_datetime, $per_page, $offset, $search_keyword);
+$country_stats = $repo->getCountryStats($start_datetime, $end_datetime);
 ?>
 <!DOCTYPE html>
 <html lang="ja">

@@ -109,10 +109,20 @@ composer install
 
 ### テスト（PHPUnit）
 
-`config.php` に依存しない純粋なユーティリティ関数（`utils.php`）を対象にテストを実行する。
-
 ```bash
 composer test          # または ./vendor/bin/phpunit
+```
+
+テストは2種類:
+
+- **ユニットテスト**（`utils.php` / `password.php`）: `config.php` やDBに依存せず常に実行される。
+- **統合テスト**（`StatsRepository`, `tests/Integration/`）: MySQL を用いて集計クエリの結果を検証する。
+  接続情報は環境変数で渡す。**未接続の環境では自動的にスキップ**される。
+
+```bash
+# 例: ローカルの MySQL コンテナ（ポート3307）に対して実行
+docker run -d --name yr-mysql -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=yourls_test -p 3307:3306 mysql:8
+DB_HOST=127.0.0.1 DB_PORT=3307 DB_NAME=yourls_test DB_USER=root DB_PASS=root composer test
 ```
 
 ### 静的解析（PHPStan / level 5）
