@@ -8,6 +8,7 @@ parameters:
         - login.php
         - logout.php
         - password.php
+        - StatsRepository.php
         - url_detail.php
         - utils.php
         - yourls_report.php

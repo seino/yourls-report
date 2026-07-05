@@ -15,6 +15,7 @@
         <include>
             <file>utils.php</file>
             <file>password.php</file>
+            <file>StatsRepository.php</file>
         </include>
     </source>
 </phpunit>
