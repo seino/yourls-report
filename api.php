@@ -23,9 +23,10 @@ if (!file_exists($config_file)) {
 }
 require_once $config_file;
 
-// 共通ユーティリティ・認証処理読み込み
+// 共通ユーティリティ・認証処理・集計リポジトリ読み込み
 require_once __DIR__ . '/utils.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/StatsRepository.php';
 
 // 共通初期化
 initApplication();
@@ -166,26 +167,14 @@ $end_datetime = $dateRange['end_datetime'];
 // 除外IP
 $excluded_ip = getExcludedIp();
 
+// 集計リポジトリ
+$repo = new StatsRepository($pdo, YOURLS_DB_PREFIX, $excluded_ip);
+
 // アクション処理
 switch ($action) {
     case 'stats':
         // 基本統計
-        $sql = "SELECT
-                    COUNT(*) as total_clicks,
-                    COUNT(DISTINCT shorturl) as unique_urls,
-                    COUNT(DISTINCT ip_address) as unique_ips
-                FROM " . YOURLS_DB_PREFIX . "log
-                WHERE click_time BETWEEN :start AND :end";
-
-        $sql .= excludedIpClause($excluded_ip);
-
-        $stmt = $pdo->prepare($sql);
-        $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip !== '') {
-            $params['excluded_ip'] = $excluded_ip;
-        }
-        $stmt->execute($params);
-        $stats = $stmt->fetch();
+        $stats = $repo->getBasicStats($start_datetime, $end_datetime);
 
         // 日数計算
         $start_dt = new DateTime($start_date);
@@ -198,107 +187,25 @@ switch ($action) {
 
     case 'top_urls':
         // トップURL
-        $sql = "SELECT
-                    l.shorturl,
-                    u.keyword,
-                    u.url,
-                    u.title,
-                    COUNT(*) as click_count,
-                    MIN(l.click_time) as first_click,
-                    MAX(l.click_time) as last_click
-                FROM " . YOURLS_DB_PREFIX . "log l
-                LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-                WHERE l.click_time BETWEEN :start AND :end";
-
-        $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
-
-        $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
-                ORDER BY click_count DESC
-                LIMIT :limit";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':start', $start_datetime);
-        $stmt->bindValue(':end', $end_datetime);
-        if ($excluded_ip !== '') {
-            $stmt->bindValue(':excluded_ip', $excluded_ip);
-        }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->execute();
-        $urls = $stmt->fetchAll();
+        $urls = $repo->getTopUrls($start_datetime, $end_datetime, $limit);
 
         sendResponse($urls);
 
     case 'daily':
         // 日別推移
-        $sql = "SELECT
-                    DATE(click_time) as date,
-                    COUNT(*) as clicks,
-                    COUNT(DISTINCT shorturl) as unique_urls,
-                    COUNT(DISTINCT ip_address) as unique_ips
-                FROM " . YOURLS_DB_PREFIX . "log
-                WHERE click_time BETWEEN :start AND :end";
-
-        $sql .= excludedIpClause($excluded_ip);
-
-        $sql .= " GROUP BY DATE(click_time)
-                ORDER BY date ASC";
-
-        $stmt = $pdo->prepare($sql);
-        $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip !== '') {
-            $params['excluded_ip'] = $excluded_ip;
-        }
-        $stmt->execute($params);
-        $daily = $stmt->fetchAll();
+        $daily = $repo->getDailyStats($start_datetime, $end_datetime);
 
         sendResponse($daily);
 
     case 'referrers':
         // リファラー統計
-        $base_where = "click_time BETWEEN :start AND :end";
-        $base_where .= excludedIpClause($excluded_ip);
-
-        $sql = "SELECT
-                    " . getReferrerCaseSql('referrer_type', false) . ",
-                    COUNT(*) as clicks
-                FROM " . YOURLS_DB_PREFIX . "log
-                WHERE {$base_where}
-                GROUP BY referrer_type
-                ORDER BY clicks DESC";
-
-        $stmt = $pdo->prepare($sql);
-        $params = ['start' => $start_datetime, 'end' => $end_datetime];
-        if ($excluded_ip !== '') {
-            $params['excluded_ip'] = $excluded_ip;
-        }
-        $stmt->execute($params);
-        $referrers = $stmt->fetchAll();
+        $referrers = $repo->getReferrerStats($start_datetime, $end_datetime);
 
         sendResponse($referrers);
 
     case 'countries':
         // 国別統計
-        $sql = "SELECT
-                    country_code,
-                    COUNT(*) as clicks
-                FROM " . YOURLS_DB_PREFIX . "log
-                WHERE click_time BETWEEN :start AND :end";
-
-        $sql .= excludedIpClause($excluded_ip);
-
-        $sql .= " GROUP BY country_code
-                ORDER BY clicks DESC
-                LIMIT :limit";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':start', $start_datetime);
-        $stmt->bindValue(':end', $end_datetime);
-        if ($excluded_ip !== '') {
-            $stmt->bindValue(':excluded_ip', $excluded_ip);
-        }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->execute();
-        $countries = $stmt->fetchAll();
+        $countries = $repo->getCountryStats($start_datetime, $end_datetime, $limit);
 
         sendResponse($countries);
 
@@ -368,27 +275,7 @@ switch ($action) {
 
     case 'realtime':
         // リアルタイム（直近1時間）
-        $sql = "SELECT
-                    l.shorturl,
-                    u.title,
-                    l.click_time,
-                    l.country_code
-                FROM " . YOURLS_DB_PREFIX . "log l
-                LEFT JOIN " . YOURLS_DB_PREFIX . "url u ON l.shorturl = u.keyword
-                WHERE l.click_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)";
-
-        $sql .= excludedIpClause($excluded_ip, 'l.ip_address');
-
-        $sql .= " ORDER BY l.click_time DESC
-                LIMIT 50";
-
-        $stmt = $pdo->prepare($sql);
-        if ($excluded_ip !== '') {
-            $stmt->execute(['excluded_ip' => $excluded_ip]);
-        } else {
-            $stmt->execute();
-        }
-        $recent = $stmt->fetchAll();
+        $recent = $repo->getRecentClicks();
 
         sendResponse($recent);
 
