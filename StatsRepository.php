@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/utils.php';
+
 /**
  * 集計クエリのリポジトリ
  *
@@ -39,6 +41,16 @@ class StatsRepository
     }
 
     /**
+     * bindValue 形式のクエリで、除外IPが設定されていればバインドする。
+     */
+    private function bindExcludedIp(PDOStatement $stmt): void
+    {
+        if ($this->excludedIp !== '') {
+            $stmt->bindValue(':excluded_ip', $this->excludedIp);
+        }
+    }
+
+    /**
      * 基本統計（総クリック数・ユニークURL数・ユニークIP数）
      *
      * @return array<string, mixed>
@@ -70,17 +82,15 @@ class StatsRepository
                 LEFT JOIN " . $this->prefix . "url u ON l.shorturl = u.keyword
                 WHERE l.click_time BETWEEN :start AND :end";
         $sql .= excludedIpClause($this->excludedIp, 'l.ip_address');
-        if ($searchKeyword !== '') {
+        if (!empty($searchKeyword)) {
             $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
         }
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->bindValue(':start', $start);
         $stmt->bindValue(':end', $end);
-        if ($this->excludedIp !== '') {
-            $stmt->bindValue(':excluded_ip', $this->excludedIp);
-        }
-        if ($searchKeyword !== '') {
+        $this->bindExcludedIp($stmt);
+        if (!empty($searchKeyword)) {
             $like = '%' . escapeLikeWildcards($searchKeyword) . '%';
             $stmt->bindValue(':search_title', $like);
             $stmt->bindValue(':search_url', $like);
@@ -114,7 +124,7 @@ class StatsRepository
                 LEFT JOIN " . $this->prefix . "url u ON l.shorturl = u.keyword
                 WHERE l.click_time BETWEEN :start AND :end";
         $sql .= excludedIpClause($this->excludedIp, 'l.ip_address');
-        if ($searchKeyword !== '') {
+        if (!empty($searchKeyword)) {
             $sql .= " AND (u.title LIKE :search_title OR u.url LIKE :search_url)";
         }
         $sql .= " GROUP BY l.shorturl, u.keyword, u.url, u.title
@@ -124,12 +134,10 @@ class StatsRepository
         $stmt = $this->pdo->prepare($sql);
         $stmt->bindValue(':start', $start);
         $stmt->bindValue(':end', $end);
-        if ($this->excludedIp !== '') {
-            $stmt->bindValue(':excluded_ip', $this->excludedIp);
-        }
+        $this->bindExcludedIp($stmt);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        if ($searchKeyword !== '') {
+        if (!empty($searchKeyword)) {
             $like = '%' . escapeLikeWildcards($searchKeyword) . '%';
             $stmt->bindValue(':search_title', $like);
             $stmt->bindValue(':search_url', $like);
@@ -159,9 +167,7 @@ class StatsRepository
         $stmt = $this->pdo->prepare($sql);
         $stmt->bindValue(':start', $start);
         $stmt->bindValue(':end', $end);
-        if ($this->excludedIp !== '') {
-            $stmt->bindValue(':excluded_ip', $this->excludedIp);
-        }
+        $this->bindExcludedIp($stmt);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
 
@@ -236,9 +242,7 @@ class StatsRepository
                 LIMIT :limit";
 
         $stmt = $this->pdo->prepare($sql);
-        if ($this->excludedIp !== '') {
-            $stmt->bindValue(':excluded_ip', $this->excludedIp);
-        }
+        $this->bindExcludedIp($stmt);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
 

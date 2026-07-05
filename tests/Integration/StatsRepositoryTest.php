@@ -71,6 +71,14 @@ final class StatsRepositoryTest extends DatabaseTestCase
         $this->assertSame(1, $this->repo()->getTopUrlsCount(self::START, self::END, 'Alpha'));
     }
 
+    #[TestDox('検索キーワードが"0"のとき、（empty扱いで）絞り込まず全件を数える')]
+    public function testTopUrlsCountWithZeroSearchIsNotFiltered(): void
+    {
+        // 旧実装の !empty() 判定を踏襲: "0" は検索条件として扱わない
+        $this->seed();
+        $this->assertSame(2, $this->repo()->getTopUrlsCount(self::START, self::END, '0'));
+    }
+
     #[TestDox('トップURLはクリック数降順で返る')]
     public function testTopUrls(): void
     {
@@ -169,5 +177,51 @@ final class StatsRepositoryTest extends DatabaseTestCase
         $this->assertCount(1, $rows);
         $this->assertSame('aaa', $rows[0]['shorturl']);
         $this->assertSame('Alpha', $rows[0]['title']);
+    }
+
+    #[TestDox('国別統計は除外IPを反映する')]
+    public function testCountryStatsWithExcludedIp(): void
+    {
+        $this->seed();
+        $rows = $this->repo('192.168.0.1')->getCountryStats(self::START, self::END);
+
+        $byCode = [];
+        foreach ($rows as $row) {
+            $byCode[$row['country_code']] = (int) $row['clicks'];
+        }
+        $this->assertSame(3, $byCode['JP']);
+        $this->assertSame(1, $byCode['US']);
+    }
+
+    #[TestDox('リファラー統計は除外IPを反映する')]
+    public function testReferrerStatsWithExcludedIp(): void
+    {
+        $this->seed();
+        $rows = $this->repo('192.168.0.1')->getReferrerStats(self::START, self::END);
+
+        $byType = [];
+        foreach ($rows as $row) {
+            $byType[$row['referrer_type']] = (int) $row['clicks'];
+        }
+        // 除外対象（192.168.0.1 の direct 1件）が減り direct=3、google=1
+        $this->assertSame(3, $byType['direct']);
+        $this->assertSame(1, $byType['google']);
+    }
+
+    #[TestDox('リアルタイムは除外IPのアクセスを含めない')]
+    public function testRecentClicksWithExcludedIp(): void
+    {
+        $stmt = self::$pdo->prepare(
+            'INSERT INTO ' . self::PREFIX . 'log (shorturl, click_time, ip_address, country_code, referrer)
+             VALUES (:s, NOW(), :ip, :cc, :ref)'
+        );
+        $this->insertUrl('aaa', 'http://example.com/a', 'Alpha');
+        // 除外IPと通常IPの直近アクセスを1件ずつ
+        $stmt->execute(['s' => 'aaa', 'ip' => '192.168.0.1', 'cc' => 'JP', 'ref' => 'direct']);
+        $stmt->execute(['s' => 'aaa', 'ip' => '10.0.0.9', 'cc' => 'JP', 'ref' => 'direct']);
+
+        $rows = $this->repo('192.168.0.1')->getRecentClicks();
+
+        $this->assertCount(1, $rows);
     }
 }
